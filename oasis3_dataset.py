@@ -143,8 +143,10 @@ class OASIS3Dataset(torch.utils.data.Dataset):
 
 
             patients.append(p)
-
-        self.patients = patients#[0:100]
+        if split == 'train':
+            self.patients = patients[0:100]
+        else:
+            self.patients = patients[0:100]
         # print(patients[0:5])
 
 
@@ -157,7 +159,7 @@ class OASIS3Dataset(torch.utils.data.Dataset):
         scans = []
         found_one = False
 
-        for i in range(1):#patient['num_scans']):
+        for i in range(patient['num_scans']):
             scan_id = 'scan' + str(i+1)
             # print(patient['id'], " : ", patient[scan_id])
             scan = nib.load(patient[scan_id]).get_data()
@@ -186,8 +188,9 @@ class OASIS3Dataset(torch.utils.data.Dataset):
             scan = np.transpose(scan, (2, 0, 1)) # slice # first
 
             # print(scan.shape)
-            scan = (scan - scan.min()) / (scan.max() - scan.min())
-            # scan = (scan - self.mean)/ self.std
+            # scan = (scan - scan.min()) / (scan.max() - scan.min())
+            scan = scan / 255
+            scan = (scan - self.mean)/ self.std
             found_one = True
 
             # scan = x.expand(39, 3, 20, 256, 256)
@@ -302,12 +305,12 @@ def get_mean_and_std(dataset, split, samples=100):
 
 def get_oasis3_datasets():
 
-    mean, std = get_mean_and_std(OASIS3Dataset(split="train"), 'train')
-    print(mean, " ",std)
+    # mean, std = get_mean_and_std(OASIS3Dataset(split="train"), 'train')
+    # print(mean, " ",std)
 
     kwargs = {
-              "mean": mean,
-              "std": std
+              "mean": 0.43216,#mean,
+              "std": 0.22803#std
               }
 
     dataset_train = OASIS3Dataset(split="train", **kwargs)
@@ -320,7 +323,7 @@ def get_oasis3_datasets():
     #           "std": std,
     #           }
 
-    dataset_test = OASIS3Dataset(split="val", **kwargs)
+    dataset_test = OASIS3Dataset(split="test", **kwargs)
 
     return dataset_train, dataset_test
 
@@ -352,3 +355,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

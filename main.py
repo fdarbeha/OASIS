@@ -25,15 +25,16 @@ from model import construct_3d_enc, construct_rnn
 
 from torch.cuda.amp import GradScaler, autocast
 
-torch.backends.cudnn.enabled = False
+torch.backends.cudnn.enabled = True
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 s=1
-video_transform_list = [video_transforms.RandomRotation(15),
-                        # video_transforms.RandomCrop((50, 50)),
+video_transform_list = [video_transforms.RandomRotation(5),
+                        # video_transforms.RandomCrop((80, 80)),
+                        # video_transforms.Resize(112, 112),
                         # video_transforms.RandomResize((112, 112)),
-                        video_transforms.RandomHorizontalFlip(),
-                        video_transforms.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s),
+                        # video_transforms.RandomHorizontalFlip(),
+                        # video_transforms.ColorJitter(0.9 * s, 0.9 * s, 0.9 * s, 0.1 * s),
                         volume_transforms.ClipToTensor(3, 3)]
 
 data_augment = video_transforms.Compose(video_transform_list)
@@ -57,10 +58,10 @@ def dataloader(batch_size):
         print('TEST DATASET: ', len(testset), testset[0][0].shape)
         
         trainloader = data.DataLoader(trainset, batch_size=batch_size, \
-                                    shuffle = True, num_workers=0, drop_last=True,\
+                                    shuffle = True, num_workers=5, drop_last=True,\
                                     collate_fn=collate_fn)
         testloader  = data.DataLoader(testset, batch_size=batch_size, \
-                                    shuffle = False, num_workers=0, drop_last=True,\
+                                    shuffle = False, num_workers=5, drop_last=True,\
                                     collate_fn=collate_fn)
 
     return trainloader, testloader
@@ -108,11 +109,11 @@ def train_supervise(cnn, rnn, epoch, criterion, optimizer, trainloader, scaler):
     yhat = []
     y = []
 
-    for (i, (inputs, labels, lengths)) in enumerate(trainloader):
-    # for (i, (inputs, labels, lengths)) in enumerate(tqdm.tqdm(trainloader)):
+    # for (i, (inputs, labels, lengths)) in enumerate(trainloader):
+    for (i, (inputs, labels, lengths)) in enumerate(tqdm.tqdm(trainloader)):
         if inputs == None:
             continue
-        inputs = inputs.to(device)        
+        # inputs = inputs.to(device)        
         labels = labels.to(device)
         lengths = lengths.to(device)
 
@@ -122,23 +123,26 @@ def train_supervise(cnn, rnn, epoch, criterion, optimizer, trainloader, scaler):
         batch_size = lengths.shape[0]
 
         optimizer.zero_grad()
-        
+
+        x_1 = torch.zeros_like(inputs)
+            
+        for idx, x1 in enumerate(inputs):
+                x1 = get_image_patch_tensor_from_volume_batch(x1)
+                x_1[idx] = data_augment(x1)
+
+        inputs = x_1.to(device)
+                 
         with torch.set_grad_enabled(True):
             # with autocast():
-            # x_1 = torch.zeros_like(inputs).cuda()
-            
-            # for idx, x1 in enumerate(inputs):
-            #         x1 = get_image_patch_tensor_from_volume_batch(x1)
-            #         x_1[idx] = data_augment(x1)
 
-            # inputs = x_1
+            
             # inputs = reshape_images_cnn_input(inputs, lengths)
             # print("input of cnn shape ", inputs.shape)
             outputs = cnn(inputs)
-            # outputs = reshape_rnn_input(outputs, lengths, batch_size)
+            outputs = reshape_rnn_input(outputs, lengths, batch_size)
             # # outputs.to(device)
             # # print("input of rnn shape ",outputs.shape)
-            # outputs = rnn(outputs, lengths)
+            outputs = rnn(outputs, lengths)
             # print(labels)
             # print()
             # print(outputs)
@@ -178,11 +182,11 @@ def eval_supervise(cnn, rnn, epoch, criterion, testloader):
     yhat = []
     y = []
 
-    for (i, (inputs, labels, lengths)) in enumerate(trainloader):
-    # for (i, (inputs, labels, lengths)) in enumerate(tqdm.tqdm(testloader)):
+    # for (i, (inputs, labels, lengths)) in enumerate(testloader):
+    for (i, (inputs, labels, lengths)) in enumerate(tqdm.tqdm(testloader)):
         if inputs == None:
             continue
-        inputs = inputs.to(device)        
+        # inputs = inputs.to(device)        
         labels = labels.to(device)
         lengths = lengths.to(device)
 
@@ -192,6 +196,13 @@ def eval_supervise(cnn, rnn, epoch, criterion, testloader):
         batch_size = lengths.shape[0]
 
         # optimizer.zero_grad()
+        x_1 = torch.zeros_like(inputs)
+            
+        for idx, x1 in enumerate(inputs):
+                x1 = get_image_patch_tensor_from_volume_batch(x1)
+                x_1[idx] = data_augment(x1)
+
+        inputs = x_1.to(device)
     
         with torch.set_grad_enabled(False):
             # with autocast():
@@ -199,10 +210,10 @@ def eval_supervise(cnn, rnn, epoch, criterion, testloader):
             # inputs = reshape_images_cnn_input(inputs, lengths)
             # print("input of cnn shape ", inputs.shape)
             outputs = cnn(inputs)
-            # outputs = reshape_rnn_input(outputs, lengths, batch_size)
+            outputs = reshape_rnn_input(outputs, lengths, batch_size)
             # outputs.to(device)
             # print("input of rnn shape ",outputs.shape)
-            # outputs = rnn(outputs, lengths)
+            outputs = rnn(outputs, lengths)
             # print(labels)
             # print()
             # print(outputs)
@@ -261,12 +272,19 @@ def SimCLR(net, epoch, criterion, optimizer, trainloader, args):
 
     return loss_meter.average(), running_loss
 
-def checkpoint(net, model_store_folder, epoch_num, model):
+def checkpoint(net, model_store_folder, epoch_num, model, optimizer, lr_scheduler):
     print('Saving checkpoints...')
     
+    checkpoint = {
+                'model': net.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'lr_scheduler': lr_scheduler.state_dict(),
+                'epoch': epoch_num}
+
+
     suffix_latest = '{}_epoch_{}.pth'.format(model, epoch_num)
-    dict_net = net.state_dict()
-    torch.save(dict_net,
+    # dict_net = net.state_dict()
+    torch.save(checkpoint,
                '{}/{}'.format(model_store_folder, suffix_latest))
 
 if __name__ == "__main__":
@@ -274,7 +292,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # model related arguments
     parser.add_argument('--encoder_model', default='r3d_18')
-    parser.add_argument('--encoder_pretrained', default=False)
+    parser.add_argument('--encoder_pretrained', default=True)
     parser.add_argument('--supervised', default=True)
     parser.add_argument('--projection_size', default=64, type=int)
     parser.add_argument('--run', default=None, type=int, help='epoch to use weights')
@@ -348,9 +366,9 @@ if __name__ == "__main__":
         params = list(cnn.parameters()) + list(rnn.parameters())
         criterion = torch.nn.BCELoss()
         # optimizer = optim.Adam(params, lr=args.lr, betas=(args.beta1, args.beta2))
-        optimizer = optim.SGD(params, lr=args.lr, momentum=args.beta1, weight_decay=1e-4)
+        # optimizer = optim.SGD(params, lr=args.lr, momentum=args.beta1, weight_decay=1e-5)
 
-        # scheduler = torch.optim.lr_scheduler.StepLR(optim, lr_step_period)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 20)
         
         print("\nStart supervised training!\n")
         scaler = GradScaler()
@@ -358,13 +376,14 @@ if __name__ == "__main__":
         for epoch in range(1, args.epoch+1):
             train_loss, train_auc = train_supervise(cnn, rnn, epoch, criterion, optimizer, trainloader, scaler)
             print('epoch {} average train loss : {}'.format(epoch, train_loss))
+            scheduler.step()
             #test(net, epoch, criterion, testloader, args)
             eval_loss, eval_auc = eval_supervise(cnn, rnn, epoch, criterion, testloader)
             print('epoch {} average eval loss : {}'.format(epoch, eval_loss))
             
             
-            checkpoint(cnn, model_store_folder, epoch, "supervised_cnn")
-            checkpoint(rnn, model_store_folder, epoch, "supervised_rnn")
+            checkpoint(cnn, model_store_folder, epoch, "supervised_cnn", optimizer, scheduler)
+            checkpoint(rnn, model_store_folder, epoch, "supervised_rnn", optimizer, scheduler)
 
             # Write stats into csv file
             stats = dict(
@@ -377,11 +396,11 @@ if __name__ == "__main__":
             write_csv_stats(simclr_stats_csv_path, stats)
 
             if eval_loss < bestLoss:
-                checkpoint(cnn, model_store_folder, epoch, "best_supervised_cnn")
-                checkpoint(rnn, model_store_folder, epoch, "best_supervised_rnn")
+                # checkpoint(cnn, model_store_folder, epoch, "best_supervised_cnn", optimizer, scheduler)
+                # checkpoint(rnn, model_store_folder, epoch, "best_supervised_rnn", optimizer, scheduler)
                 bestLoss = eval_loss
         
-        print("supervised training completed!")
+        print("supervised training completed! Best loss: {}".format(bestLoss))
     
 
 

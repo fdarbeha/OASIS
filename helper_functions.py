@@ -46,14 +46,14 @@ def get_image_patch_tensor_from_volume_batch(img_batch):
     """
     # Input of the function is a tensor [C, frame, H, W]
     # Output of the functions is a tensor [frame, C, H, W]
-    print("img batch shape: ", img_batch.shape)
+    # print("img batch shape: ", img_batch.shape)
     all_frames_list = []
 
     for i in range(img_batch.shape[1]): #frames
         all_frames_list.append(to_pil_image(img_batch[:, i, :, :]))
         # print(to_tensor(all_frames_list[i]).shape)
     
-    print(len(all_frames_list))
+    # print(len(all_frames_list))
     return all_frames_list
 
 

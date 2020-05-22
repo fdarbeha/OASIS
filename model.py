@@ -41,8 +41,8 @@ class ENC3D_CNN(nn.Module):
             h = F.relu(h)
             h = self.l2(h)
 
-        x = self.l1(x)
-        x = self.sigmoid(x)
+        # x = self.l1(x)
+        # x = self.sigmoid(x)
         return x
 
 
@@ -88,7 +88,7 @@ class RNN(nn.Module):
         # Decode the hidden state of the last time step
         out = self.bn1(self.fc1(hn[-1, :, :]))
         out = F.relu(out)
-        out = F.dropout(out, 0.2, training=self.training)
+        out = F.dropout(out, 0.5, training=self.training)
         # out = F.relu(self.fc1(x))
         out = self.act(self.fc2(out))
         # print("output of rnn shape ", out.shape)
