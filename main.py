@@ -29,11 +29,10 @@ torch.backends.cudnn.enabled = True
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 s=1
-video_transform_list = [video_transforms.RandomRotation(5),
-                        # video_transforms.RandomCrop((80, 80)),
-                        # video_transforms.Resize(112, 112),
-                        # video_transforms.RandomResize((112, 112)),
-                        # video_transforms.RandomHorizontalFlip(),
+video_transform_list = [video_transforms.RandomRotation(45),
+                        video_transforms.RandomCrop((80, 80)),
+                        video_transforms.Resize(112, 112),
+                        video_transforms.RandomHorizontalFlip(),
                         # video_transforms.ColorJitter(0.9 * s, 0.9 * s, 0.9 * s, 0.1 * s),
                         volume_transforms.ClipToTensor(3, 3)]
 
@@ -366,9 +365,9 @@ if __name__ == "__main__":
         params = list(cnn.parameters()) + list(rnn.parameters())
         criterion = torch.nn.BCELoss()
         # optimizer = optim.Adam(params, lr=args.lr, betas=(args.beta1, args.beta2))
-        # optimizer = optim.SGD(params, lr=args.lr, momentum=args.beta1, weight_decay=1e-5)
+        optimizer = optim.SGD(params, lr=args.lr, momentum=args.beta1, weight_decay=1e-5)
 
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 20)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5)
         
         print("\nStart supervised training!\n")
         scaler = GradScaler()
